@@ -1,0 +1,20 @@
+# dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+
+# expo local files
+.expo
+.expo-shared
+
+# build artifacts
+dist
+build
+
+# system files
+.DS_Store
+Thumbs.db
+
+# archives
+*.tar.gz
+*.zip
