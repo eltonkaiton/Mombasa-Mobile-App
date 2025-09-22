@@ -9,11 +9,11 @@ import {
   RefreshControl,
   Alert,
   TouchableOpacity,
-  SafeAreaView,
   Modal,
   Button,
   TextInput,
 } from 'react-native';
+import { SafeAreaView } from "react-native-safe-area-context";
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
