@@ -76,6 +76,7 @@ router.get('/mybookings', authenticateToken, async (req, res) => {
     }
 
     const bookings = await Booking.find(filters)
+      .populate('user_id', 'full_name email') // ✅ include passenger details
       .sort({ created_at: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit));
@@ -133,7 +134,7 @@ router.get('/:id/receipt/pdf', authenticateToken, async (req, res) => {
     const booking = await Booking.findOne({
       _id: req.params.id,
       user_id: req.user.id,
-    });
+    }).populate('user_id', 'full_name email'); // ✅ also fetch passenger details
 
     if (!booking) {
       return res
@@ -172,17 +173,19 @@ router.get('/:id/receipt/pdf', authenticateToken, async (req, res) => {
       doc.fontSize(20).text('Booking Receipt', { align: 'center' });
       doc.moveDown();
 
+      // ✅ Passenger Details
+      doc.fontSize(12).text(`Passenger Name: ${booking.user_id.full_name}`);
+      doc.text(`Email: ${booking.user_id.email}`);
+
       // Booking Details
-      doc.fontSize(12).text(`Booking ID: ${booking._id}`);
+      doc.text(`Booking ID: ${booking._id}`);
       doc.text(`Type: ${booking.booking_type}`);
       doc.text(`Route: ${booking.route}`);
       doc.text(`Date: ${new Date(booking.travel_date).toDateString()}`);
       doc.text(`Time: ${booking.travel_time}`);
       doc.text(`Passengers: ${booking.num_passengers || 'N/A'}`);
       doc.text(
-        `Vehicle: ${booking.vehicle_type || 'N/A'} (${
-          booking.vehicle_plate || 'N/A'
-        })`
+        `Vehicle: ${booking.vehicle_type || 'N/A'} (${booking.vehicle_plate || 'N/A'})`
       );
       doc.text(`Cargo: ${booking.cargo_description || 'N/A'}`);
       doc.text(`Weight: ${booking.cargo_weight_kg || 'N/A'} kg`);

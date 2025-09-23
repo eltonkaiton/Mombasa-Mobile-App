@@ -276,4 +276,41 @@ router.patch('/deliveries/:id/received', authenticateInventoryToken, async (req,
   }
 });
 
+// PATCH: Inventory confirms delivery received (idempotent)
+router.patch('/deliveries/:id/confirm-received', authenticateInventoryToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    // Cannot confirm if supplier hasn't delivered
+    if (order.delivery_status === 'pending') {
+      return res.status(400).json({ message: 'Cannot confirm receipt. Supplier has not delivered yet.' });
+    }
+
+    // Already received
+    if (order.delivery_status === 'received') {
+      return res.status(200).json({ message: 'Delivery already confirmed as received', order });
+    }
+
+    // Only allow confirmation if supplier has delivered
+    if (order.delivery_status === 'delivered') {
+      order.delivery_status = 'received';
+      order.received_at = new Date();
+      await order.save();
+      return res.status(200).json({ message: 'Delivery confirmed as received', order });
+    }
+
+    // Fallback for unexpected status
+    return res.status(400).json({ message: 'Cannot confirm receipt for this delivery status' });
+
+  } catch (err) {
+    console.error('Confirm received error:', err);
+    res.status(500).json({ message: 'Failed to confirm delivery receipt' });
+  }
+});
+
+
+
 export default router;

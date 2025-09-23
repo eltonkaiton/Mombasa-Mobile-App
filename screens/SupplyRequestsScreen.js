@@ -1,4 +1,4 @@
-// 📱 SupplierSupplyScreen.js — with Accept/Reject + Supply + Delivery + Always Show Receipt (bordered table + signature)
+// 📱 SupplierSupplyScreen.js — Accept/Reject + Supply (limit <100,000) + Delivery + Always Show Receipt + Submitted Button
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -67,16 +67,29 @@ export default function SupplierSupplyScreen() {
     }
   };
 
-  // ✅ Submit supply amount
+  // ✅ Submit supply amount (must be < 100,000)
   const submitSupply = async () => {
     try {
+      const supplyAmount = parseFloat(amount);
+
+      if (isNaN(supplyAmount) || supplyAmount <= 0) {
+        Alert.alert("Invalid Input", "Please enter a valid positive amount.");
+        return;
+      }
+
+      if (supplyAmount >= 100000) {
+        Alert.alert("Limit Exceeded", "The supply amount must be less than 100,000 KES.");
+        return;
+      }
+
       const token = await AsyncStorage.getItem('token');
-      await axios.put(`${API_URL}/supply/${currentOrderId}`, { amount }, {
+      await axios.put(`${API_URL}/supply/${currentOrderId}`, { amount: supplyAmount }, {
         headers: { Authorization: `Bearer ${token}` },
       });
+
       setModalVisible(false);
       setAmount('');
-      fetchOrders();
+      fetchOrders(); // refresh orders to update the button
     } catch (err) {
       console.error('❌ Submit supply failed:', err.response?.data || err.message);
     }
@@ -101,7 +114,6 @@ export default function SupplierSupplyScreen() {
       const fileUri = FileSystem.documentDirectory + `${item.item_id?.item_name || 'receipt'}_${item._id}.pdf`;
 
       if (receiptUrl) {
-        // Download from backend if available
         const fileInfo = await FileSystem.getInfoAsync(fileUri);
         if (!fileInfo.exists) {
           const downloadResumable = FileSystem.createDownloadResumable(receiptUrl, fileUri);
@@ -109,7 +121,6 @@ export default function SupplierSupplyScreen() {
         }
         await Sharing.shareAsync(fileUri);
       } else {
-        // Generate styled PDF receipt
         const html = `
           <html>
             <head>
@@ -119,47 +130,22 @@ export default function SupplierSupplyScreen() {
                 table { width: 100%; border-collapse: collapse; margin-top: 20px; }
                 table, th, td { border: 1px solid #333; }
                 th, td { padding: 10px; text-align: left; }
-                .footer { margin-top: 50px; display: flex; justify-content: space-between; }
                 .signature { text-align: center; margin-top: 40px; }
                 .signature-line { margin-top: 50px; border-top: 1px solid #000; width: 200px; margin-left: auto; margin-right: auto; }
               </style>
             </head>
             <body>
               <h2>Supply Receipt</h2>
-
               <table>
-                <tr>
-                  <th>Order ID</th>
-                  <td>${item._id}</td>
-                </tr>
-                <tr>
-                  <th>Item</th>
-                  <td>${item.item_id?.item_name || 'Unknown Item'}</td>
-                </tr>
-                <tr>
-                  <th>Quantity</th>
-                  <td>${item.quantity || 'N/A'}</td>
-                </tr>
-                <tr>
-                  <th>Supply Amount (KES)</th>
-                  <td>${item.amount || 'N/A'}</td>
-                </tr>
-                <tr>
-                  <th>Status</th>
-                  <td>${item.status || 'N/A'}</td>
-                </tr>
-                <tr>
-                  <th>Finance Status</th>
-                  <td>${item.finance_status || 'N/A'}</td>
-                </tr>
-                <tr>
-                  <th>Delivery Status</th>
-                  <td>${item.delivery_status || 'N/A'}</td>
-                </tr>
+                <tr><th>Order ID</th><td>${item._id}</td></tr>
+                <tr><th>Item</th><td>${item.item_id?.item_name || 'Unknown Item'}</td></tr>
+                <tr><th>Quantity</th><td>${item.quantity || 'N/A'}</td></tr>
+                <tr><th>Supply Amount (KES)</th><td>${item.amount || 'N/A'}</td></tr>
+                <tr><th>Status</th><td>${item.status || 'N/A'}</td></tr>
+                <tr><th>Finance Status</th><td>${item.finance_status || 'N/A'}</td></tr>
+                <tr><th>Delivery Status</th><td>${item.delivery_status || 'N/A'}</td></tr>
               </table>
-
               <p style="margin-top: 20px;">Generated on: ${new Date().toLocaleString()}</p>
-
               <div class="signature">
                 <p>Authorized Signature</p>
                 <div class="signature-line"></div>
@@ -169,11 +155,7 @@ export default function SupplierSupplyScreen() {
         `;
 
         const { uri } = await Print.printToFileAsync({ html });
-        await FileSystem.moveAsync({
-          from: uri,
-          to: fileUri,
-        });
-
+        await FileSystem.moveAsync({ from: uri, to: fileUri });
         await Sharing.shareAsync(fileUri);
       }
     } catch (err) {
@@ -207,8 +189,12 @@ export default function SupplierSupplyScreen() {
       )}
 
       {item.status === 'approved' && item.finance_status === 'pending' && (
-        <TouchableOpacity style={styles.button} onPress={() => { setCurrentOrderId(item._id); setModalVisible(true); }}>
-          <Text style={styles.buttonText}>Submit Supply</Text>
+        <TouchableOpacity
+          style={[styles.button, item.amount ? { backgroundColor: '#95a5a6' } : {}]}
+          onPress={() => { setCurrentOrderId(item._id); setModalVisible(true); }}
+          disabled={!!item.amount} // disable if already submitted
+        >
+          <Text style={styles.buttonText}>{item.amount ? 'Submitted' : 'Submit Supply'}</Text>
         </TouchableOpacity>
       )}
 
@@ -255,12 +241,14 @@ export default function SupplierSupplyScreen() {
               placeholder="e.g. 15000"
               style={styles.input}
             />
-            <TouchableOpacity style={styles.button} onPress={submitSupply}>
-              <Text style={styles.buttonText}>Submit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => { setModalVisible(false); setAmount(''); }} style={[styles.button, { backgroundColor: '#ccc' }]}>
-              <Text style={styles.buttonText}>Cancel</Text>
-            </TouchableOpacity>
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity style={[styles.modalButton, { backgroundColor: '#27ae60' }]} onPress={submitSupply}>
+                <Text style={styles.modalButtonText}>Submit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, { backgroundColor: '#c0392b' }]} onPress={() => { setModalVisible(false); setAmount(''); }}>
+                <Text style={styles.modalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -278,6 +266,9 @@ const styles = StyleSheet.create({
   itemText: { fontWeight: '600', fontSize: 16, marginBottom: 4 },
   modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#00000088' },
   modalContent: { backgroundColor: '#fff', padding: 20, borderRadius: 12, width: '80%' },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
+  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 20 },
+  modalButtonRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  modalButton: { flex: 1, padding: 12, borderRadius: 8, marginHorizontal: 5 },
+  modalButtonText: { color: '#fff', fontWeight: '600', textAlign: 'center' },
 });

@@ -9,49 +9,21 @@ import {
   RefreshControl,
   Alert,
   TouchableOpacity,
-  Modal,
-  Button,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from "react-native-safe-area-context";
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { Picker } from '@react-native-picker/picker';
 
-const API_URL = 'http://192.168.100.8:3000/api/inventory/items';
-const SUPPLIERS_URL = 'http://192.168.100.8:3000/api/inventory/suppliers';
-const ORDER_URL = 'http://192.168.100.8:3000/api/inventory/orders';
+// ✅ API URLs
+const DELIVERIES_URL = 'http://192.168.100.8:3000/api/inventory/deliveries';
 
 export default function InventoryScreen({ navigation }) {
-  const [inventory, setInventory] = useState([]);
+  const [deliveries, setDeliveries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [suppliers, setSuppliers] = useState([]);
-
   const [searchText, setSearchText] = useState('');
-  const [filteredInventory, setFilteredInventory] = useState([]);
-
-  // Low-stock order state
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [selectedSupplier, setSelectedSupplier] = useState('');
-  const [modalVisible, setModalVisible] = useState(false);
-
-  // Manual order state
-  const [manualOrderVisible, setManualOrderVisible] = useState(false);
-  const [manualSelectedItem, setManualSelectedItem] = useState('');
-  const [manualSelectedSupplier, setManualSelectedSupplier] = useState('');
-  const [manualQuantity, setManualQuantity] = useState('');
-
-  // Edit item modal state
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editItemData, setEditItemData] = useState({
-    _id: '',
-    item_name: '',
-    current_stock: '',
-    reorder_level: '',
-    unit: '',
-  });
 
   // ===========================
   // Axios instance with token
@@ -64,80 +36,30 @@ export default function InventoryScreen({ navigation }) {
   };
 
   // ===========================
-  // Merge items with same name
+  // Fetch deliveries
   // ===========================
-  const mergeInventoryItems = (items) => {
-    const merged = {};
-    items.forEach((item) => {
-      if (!item) return;
-      const key = item.item_name;
-      if (!merged[key]) {
-        merged[key] = { ...item };
-      } else {
-        merged[key].current_stock += item.current_stock ?? 0;
-        merged[key].reorder_level = Math.max(
-          merged[key].reorder_level ?? 0,
-          item.reorder_level ?? 0
-        );
-      }
-    });
-    return Object.values(merged);
-  };
-
-  // ===========================
-  // Fetch inventory
-  // ===========================
-  const fetchInventory = async () => {
+  const fetchDeliveries = async () => {
     try {
       const api = await axiosAuth();
-      const res = await api.get(API_URL);
-      const items = Array.isArray(res.data) ? res.data : [];
-      const mergedItems = mergeInventoryItems(items);
-      setInventory(mergedItems);
-      setFilteredInventory(
-        mergedItems.filter((item) =>
-          item.item_name.toLowerCase().includes(searchText.toLowerCase())
-        )
-      );
+      const res = await api.get(DELIVERIES_URL);
+      const data = Array.isArray(res.data) ? res.data : [];
+      setDeliveries(data);
     } catch (err) {
-      console.error('Error loading inventory:', err);
-      Alert.alert('Error', 'Failed to load inventory items.');
+      console.error('Failed to load deliveries:', err);
+      Alert.alert('Error', 'Failed to load deliveries.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  // ===========================
-  // Fetch suppliers
-  // ===========================
-  const fetchSuppliers = async () => {
-    try {
-      const api = await axiosAuth();
-      const res = await api.get(SUPPLIERS_URL);
-      setSuppliers(Array.isArray(res.data) ? res.data : []);
-    } catch (err) {
-      console.error('Failed to load suppliers:', err);
-      Alert.alert('Error', 'Failed to load suppliers.');
-    }
-  };
-
   useEffect(() => {
-    fetchInventory();
-    fetchSuppliers();
+    fetchDeliveries();
   }, []);
-
-  useEffect(() => {
-    setFilteredInventory(
-      inventory.filter((item) =>
-        item.item_name.toLowerCase().includes(searchText.toLowerCase())
-      )
-    );
-  }, [searchText, inventory]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchInventory();
+    fetchDeliveries();
   };
 
   const handleLogout = async () => {
@@ -145,162 +67,53 @@ export default function InventoryScreen({ navigation }) {
     navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
-  const openOrderModal = (item) => {
-    setSelectedItem(item);
-    setSelectedSupplier('');
-    setModalVisible(true);
-  };
-
   // ===========================
-  // Low-stock order submit
+  // Group deliveries by item
   // ===========================
-  const submitOrder = async () => {
-    if (!selectedItem || !selectedSupplier) return;
-    const payload = {
-      item_id: selectedItem._id,
-      supplier_id: selectedSupplier,
-      quantity: selectedItem.reorder_level,
-    };
-    try {
-      const api = await axiosAuth();
-      await api.post(ORDER_URL, payload);
-      Alert.alert('Success', 'Supply order placed successfully.');
-      setModalVisible(false);
-      setSelectedItem(null);
-      setSelectedSupplier('');
-      fetchInventory();
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Failed to place supply order.');
-    }
-  };
-
-  // ===========================
-  // Manual order submit
-  // ===========================
-  const submitManualOrder = async () => {
-    if (!manualSelectedItem || !manualSelectedSupplier || !manualQuantity.trim()) {
-      Alert.alert('Validation', 'Please fill all fields.');
-      return;
-    }
-    const quantityNum = Number(manualQuantity);
-    if (isNaN(quantityNum) || quantityNum <= 0) {
-      Alert.alert('Validation', 'Quantity must be a positive number.');
-      return;
-    }
-    const payload = {
-      item_id: manualSelectedItem,
-      supplier_id: manualSelectedSupplier,
-      quantity: quantityNum,
-    };
-    try {
-      const api = await axiosAuth();
-      await api.post(ORDER_URL, payload);
-      Alert.alert('Success', 'Manual supply order placed successfully.');
-      setManualOrderVisible(false);
-      setManualSelectedItem('');
-      setManualSelectedSupplier('');
-      setManualQuantity('');
-      fetchInventory();
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Failed to submit manual order.');
-    }
-  };
-
-  // ===========================
-  // Delete inventory item
-  // ===========================
-  const deleteItem = (itemId) => {
-    Alert.alert(
-      'Confirm Delete',
-      'Are you sure you want to delete this item?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const api = await axiosAuth();
-              await api.delete(`${API_URL}/${itemId}`);
-              Alert.alert('Deleted', 'Item deleted successfully.');
-              fetchInventory();
-            } catch (err) {
-              console.error(err);
-              Alert.alert('Error', 'Failed to delete item.');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  // ===========================
-  // Edit inventory item
-  // ===========================
-  const openEditModal = (item) => {
-    setEditItemData({
-      _id: item._id,
-      item_name: item.item_name,
-      current_stock: String(item.current_stock),
-      reorder_level: String(item.reorder_level),
-      unit: item.unit || '',
+  const groupDeliveries = () => {
+    const grouped = {};
+    deliveries.forEach((d) => {
+      if (!d?.item_id) return;
+      const key = d.item_id.item_name;
+      if (!grouped[key]) {
+        grouped[key] = {
+          item: d.item_id,
+          deliveries: [],
+          total: 0,
+        };
+      }
+      grouped[key].deliveries.push(d);
+      grouped[key].total += d.quantity ?? 0;
     });
-    setEditModalVisible(true);
-  };
 
-  const submitEditItem = async () => {
-    const { _id, item_name, current_stock, reorder_level, unit } = editItemData;
-    if (!item_name || !current_stock || !reorder_level) {
-      Alert.alert('Validation', 'Name, Stock, and Reorder level are required.');
-      return;
-    }
-    const payload = {
-      item_name,
-      current_stock: Number(current_stock),
-      reorder_level: Number(reorder_level),
-      unit,
-    };
-    try {
-      const api = await axiosAuth();
-      await api.put(`${API_URL}/${_id}`, payload);
-      Alert.alert('Success', 'Item updated successfully.');
-      setEditModalVisible(false);
-      fetchInventory();
-    } catch (err) {
-      console.error(err);
-      Alert.alert('Error', 'Failed to update item.');
-    }
+    // filter by search text
+    const filtered = Object.values(grouped).filter((g) =>
+      g.item.item_name.toLowerCase().includes(searchText.toLowerCase())
+    );
+
+    return filtered;
   };
 
   // ===========================
-  // Render inventory item
+  // Render grouped deliveries
   // ===========================
-  const renderItem = ({ item }) => {
-    const isLowStock = item?.current_stock < item?.reorder_level;
+  const renderDeliveryGroup = ({ item }) => {
     return (
-      <View key={item._id} style={[styles.card, isLowStock && styles.lowStockCard]}>
+      <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <Text style={styles.itemName}>{item.item_name}</Text>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            {isLowStock && (
-              <TouchableOpacity onPress={() => openOrderModal(item)}>
-                <Ionicons name="cart-outline" size={20} color="#d00000" />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={() => openEditModal(item)}>
-              <Ionicons name="create-outline" size={20} color="#0077b6" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => deleteItem(item._id)}>
-              <Ionicons name="trash-outline" size={20} color="#d00000" />
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.itemName}>{item.item.item_name}</Text>
+          <Text style={styles.totalText}>Total: {item.total} {item.item.unit}</Text>
         </View>
-        <Text style={styles.detail}>Stock: {item.current_stock}</Text>
-        <Text style={styles.detail}>Reorder Level: {item.reorder_level}</Text>
-        <Text style={styles.detail}>Unit: {item.unit}</Text>
-        {isLowStock && <Text style={styles.warningText}>⚠️ Low Stock — Reorder Needed!</Text>}
+        {item.deliveries.map((d) => (
+          <View key={d._id} style={styles.deliveryRow}>
+            <Text style={styles.deliveryText}>
+              • {d.quantity} {item.item.unit} from {d.supplier_id?.name || 'Unknown'}
+            </Text>
+            <Text style={styles.deliveryDate}>
+              {new Date(d.createdAt).toLocaleDateString()}
+            </Text>
+          </View>
+        ))}
       </View>
     );
   };
@@ -311,16 +124,9 @@ export default function InventoryScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.headerRow}>
-        <Text style={styles.header}>📋 Inventory Dashboard</Text>
+        <Text style={styles.header}>🚚 Deliveries Dashboard</Text>
         <View style={{ flexDirection: 'row' }}>
-          <TouchableOpacity
-            onPress={() => setManualOrderVisible(true)}
-            style={[styles.logoutButton, { marginRight: 10, backgroundColor: '#00b4d8' }]}
-          >
-            <Ionicons name="cart-outline" size={24} color="#fff" />
-          </TouchableOpacity>
-
-          {/* ✅ Inventory Chat Button */}
+          {/* Chat */}
           <TouchableOpacity
             onPress={() => navigation.navigate('InventoryChat')}
             style={[styles.logoutButton, { marginRight: 10, backgroundColor: '#28a745' }]}
@@ -328,6 +134,7 @@ export default function InventoryScreen({ navigation }) {
             <Ionicons name="chatbubble-ellipses-outline" size={24} color="#fff" />
           </TouchableOpacity>
 
+          {/* Logout */}
           <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
             <Ionicons name="log-out-outline" size={24} color="#fff" />
           </TouchableOpacity>
@@ -336,12 +143,18 @@ export default function InventoryScreen({ navigation }) {
 
       {/* Navigation */}
       <View style={styles.navRow}>
-        <TouchableOpacity style={styles.navButton} onPress={() => navigation.navigate('UploadInventory')}>
+        <TouchableOpacity
+          style={styles.navButton}
+          onPress={() => navigation.navigate('UploadInventory')}
+        >
           <Ionicons name="add-circle-outline" size={24} color="#0077b6" />
           <Text style={styles.navButtonText}>Upload</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navButton} onPress={() => navigation.navigate('StockDeliveries')}>
+        <TouchableOpacity
+          style={styles.navButton}
+          onPress={() => navigation.navigate('StockDeliveries')}
+        >
           <Ionicons name="cube-outline" size={24} color="#0077b6" />
           <Text style={styles.navButtonText}>Deliveries</Text>
         </TouchableOpacity>
@@ -349,177 +162,27 @@ export default function InventoryScreen({ navigation }) {
 
       {/* Search Bar */}
       <TextInput
-        placeholder="🔍 Search Inventory"
+        placeholder="🔍 Search Deliveries"
         value={searchText}
         onChangeText={setSearchText}
         style={styles.searchInput}
       />
 
-      {/* Inventory List */}
+      {/* Deliveries List */}
       <FlatList
-        data={filteredInventory}
-        keyExtractor={(item, index) => item._id || `fallback-${index}`}
-        renderItem={renderItem}
+        data={groupDeliveries()}
+        keyExtractor={(item, index) => item.item._id || `group-${index}`}
+        renderItem={renderDeliveryGroup}
         contentContainerStyle={{ paddingBottom: 20 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 30 }}>No items.</Text>}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        ListEmptyComponent={
+          <Text style={{ textAlign: 'center', marginTop: 30 }}>
+            No deliveries found.
+          </Text>
+        }
       />
-
-      {/* Modals */}
-      {/* Low-stock order */}
-      <Modal visible={modalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Place Order for {selectedItem?.item_name}</Text>
-            <Text>Select Supplier:</Text>
-            <Picker
-              selectedValue={selectedSupplier}
-              onValueChange={(value) => setSelectedSupplier(value)}
-              style={{ height: 50, width: '100%' }}
-            >
-              <Picker.Item label="Select Supplier" value="" />
-              {suppliers.map((s) => (
-                <Picker.Item key={s._id} label={s.name || 'Unknown'} value={s._id} />
-              ))}
-            </Picker>
-
-            {selectedSupplier && (
-              <View style={{ marginVertical: 10, padding: 10, backgroundColor: '#eef6ff', borderRadius: 6 }}>
-                <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Order Preview:</Text>
-                <Text>Item: {selectedItem?.item_name}</Text>
-                <Text>Supplier: {suppliers.find((s) => s._id === selectedSupplier)?.name || 'Unknown'}</Text>
-                <Text>Quantity: {selectedItem?.reorder_level}</Text>
-              </View>
-            )}
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Button
-                title="Cancel"
-                onPress={() => {
-                  setModalVisible(false);
-                  setSelectedItem(null);
-                  setSelectedSupplier('');
-                }}
-                color="#888"
-              />
-              <Button title="Order" onPress={submitOrder} color="#0077b6" disabled={!selectedSupplier || !selectedItem?.reorder_level} />
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Manual order */}
-      <Modal visible={manualOrderVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>🛒 Manual Supply Order</Text>
-
-            <Text>Select Item:</Text>
-            <Picker
-              selectedValue={manualSelectedItem}
-              onValueChange={(value) => setManualSelectedItem(value)}
-              style={{ height: 50, width: '100%' }}
-            >
-              <Picker.Item label="Select Item" value="" />
-              {inventory.map((item) => (
-                <Picker.Item key={item._id} label={item.item_name || 'Unknown'} value={item._id} />
-              ))}
-            </Picker>
-
-            <Text>Select Supplier:</Text>
-            <Picker
-              selectedValue={manualSelectedSupplier}
-              onValueChange={(value) => setManualSelectedSupplier(value)}
-              style={{ height: 50, width: '100%' }}
-            >
-              <Picker.Item label="Select Supplier" value="" />
-              {suppliers.map((s) => (
-                <Picker.Item key={s._id} label={s.name || 'Unknown'} value={s._id} />
-              ))}
-            </Picker>
-
-            <TextInput
-              placeholder="Enter Quantity"
-              keyboardType="numeric"
-              value={manualQuantity}
-              onChangeText={setManualQuantity}
-              style={styles.input}
-            />
-
-            {manualSelectedItem && manualSelectedSupplier && manualQuantity && (
-              <View style={{ marginVertical: 10, padding: 10, backgroundColor: '#eef6ff', borderRadius: 6 }}>
-                <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Order Preview:</Text>
-                <Text>Item: {inventory.find((i) => i._id === manualSelectedItem)?.item_name || 'Unknown'}</Text>
-                <Text>Supplier: {suppliers.find((s) => s._id === manualSelectedSupplier)?.name || 'Unknown'}</Text>
-                <Text>Quantity: {manualQuantity}</Text>
-              </View>
-            )}
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Button
-                title="Cancel"
-                color="#888"
-                onPress={() => {
-                  setManualOrderVisible(false);
-                  setManualSelectedItem('');
-                  setManualSelectedSupplier('');
-                  setManualQuantity('');
-                }}
-              />
-              <Button
-                title="Order"
-                color="#0077b6"
-                onPress={submitManualOrder}
-                disabled={!manualSelectedItem || !manualSelectedSupplier || !manualQuantity.trim()}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Edit item */}
-      <Modal visible={editModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>✏️ Edit Item</Text>
-
-            <Text>Name:</Text>
-            <TextInput
-              value={editItemData.item_name}
-              onChangeText={(text) => setEditItemData({ ...editItemData, item_name: text })}
-              style={styles.input}
-            />
-
-            <Text>Stock:</Text>
-            <TextInput
-              value={editItemData.current_stock}
-              keyboardType="numeric"
-              onChangeText={(text) => setEditItemData({ ...editItemData, current_stock: text })}
-              style={styles.input}
-            />
-
-            <Text>Reorder Level:</Text>
-            <TextInput
-              value={editItemData.reorder_level}
-              keyboardType="numeric"
-              onChangeText={(text) => setEditItemData({ ...editItemData, reorder_level: text })}
-              style={styles.input}
-            />
-
-            <Text>Unit:</Text>
-            <TextInput
-              value={editItemData.unit}
-              onChangeText={(text) => setEditItemData({ ...editItemData, unit: text })}
-              style={styles.input}
-            />
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-              <Button title="Cancel" color="#888" onPress={() => setEditModalVisible(false)} />
-              <Button title="Save" color="#0077b6" onPress={submitEditItem} />
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -529,21 +192,76 @@ export default function InventoryScreen({ navigation }) {
 // ===========================
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16, backgroundColor: '#f5faff' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16 },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
   header: { fontSize: 22, fontWeight: 'bold', color: '#0077b6' },
-  logoutButton: { backgroundColor: '#0077b6', padding: 8, borderRadius: 20 },
-  navRow: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', marginBottom: 16 },
-  navButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#e0f7fa', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 20, marginBottom: 8 },
-  navButtonText: { marginLeft: 6, fontSize: 15, color: '#0077b6', fontWeight: '500' },
-  searchInput: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 10, marginBottom: 12, backgroundColor: '#fff' },
-  card: { backgroundColor: '#ffffff', borderRadius: 10, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
-  lowStockCard: { backgroundColor: '#fff0f0', borderColor: '#ff4d4d', borderWidth: 1 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' },
+  logoutButton: {
+    backgroundColor: '#0077b6',
+    padding: 8,
+    borderRadius: 20,
+  },
+  navRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    marginBottom: 16,
+  },
+  navButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e0f7fa',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 8,
+  },
+  navButtonText: {
+    marginLeft: 6,
+    fontSize: 15,
+    color: '#0077b6',
+    fontWeight: '500',
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    padding: 10,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+  },
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 6,
+    borderLeftColor: '#0077b6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    alignItems: 'center',
+  },
   itemName: { fontSize: 18, fontWeight: 'bold', color: '#023e8a' },
-  detail: { fontSize: 15, color: '#333', marginBottom: 2 },
-  warningText: { marginTop: 8, color: '#d00000', fontWeight: '600' },
-  modalOverlay: { flex: 1, backgroundColor: '#000000aa', justifyContent: 'center', paddingHorizontal: 30 },
-  modalCard: { backgroundColor: '#fff', borderRadius: 10, padding: 20 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 10, marginVertical: 5 },
+  totalText: { fontSize: 14, fontWeight: '600', color: '#0077b6' },
+  deliveryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#f0f9ff',
+    padding: 6,
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  deliveryText: { fontSize: 14, color: '#333' },
+  deliveryDate: { fontSize: 12, color: '#666' },
 });

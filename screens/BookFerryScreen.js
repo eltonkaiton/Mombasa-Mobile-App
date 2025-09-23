@@ -8,8 +8,10 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
@@ -18,8 +20,10 @@ const BookingScreen = () => {
   const navigation = useNavigation();
 
   const [bookingType, setBookingType] = useState('passenger');
-  const [travelDate, setTravelDate] = useState('');
-  const [travelTime, setTravelTime] = useState('');
+  const [travelDate, setTravelDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+
   const [route, setRoute] = useState('');
   const [numPassengers, setNumPassengers] = useState('');
   const [vehicleType, setVehicleType] = useState('');
@@ -30,7 +34,6 @@ const BookingScreen = () => {
   const [transactionId, setTransactionId] = useState('');
   const [amountPaid, setAmountPaid] = useState('');
   const [loading, setLoading] = useState(false);
-  const [userId, setUserId] = useState(null);
 
   const API_BASE_URL = 'http://192.168.100.8:3000/api';
 
@@ -42,27 +45,6 @@ const BookingScreen = () => {
     'Likoni - Mtongwe',
     'Mtongwe - Likoni',
   ];
-
-  useEffect(() => {
-    const now = new Date();
-    setTravelDate(now.toISOString().split('T')[0]);
-    setTravelTime(now.toTimeString().split(':').slice(0, 2).join(':'));
-  }, []);
-
-  useEffect(() => {
-    const getUserId = async () => {
-      try {
-        const token = await AsyncStorage.getItem('token');
-        const res = await axios.get(`${API_BASE_URL}/users/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setUserId(res.data.user.id);
-      } catch (error) {
-        console.error('Failed to fetch user ID:', error);
-      }
-    };
-    getUserId();
-  }, []);
 
   useEffect(() => {
     if (bookingType === 'vehicle') {
@@ -89,13 +71,10 @@ const BookingScreen = () => {
     try {
       const token = await AsyncStorage.getItem('token');
 
-      // Convert travel date + time into ISO Date object
-      const isoDateTime = new Date(`${travelDate}T${travelTime}:00Z`);
-
       const bookingData = {
         booking_type: bookingType,
-        travel_date: isoDateTime, // send as real Date
-        travel_time: travelTime,
+        travel_date: travelDate.toISOString().split('T')[0], // date only
+        travel_time: formatTime(travelDate), // ✅ add required travel_time
         route,
         amount_paid: Number(amountPaid),
       };
@@ -143,10 +122,15 @@ const BookingScreen = () => {
     setPaymentMethod('mpesa');
     setTransactionId('');
     setAmountPaid('');
+    setTravelDate(new Date());
+  };
 
-    const now = new Date();
-    setTravelDate(now.toISOString().split('T')[0]);
-    setTravelTime(now.toTimeString().split(':').slice(0, 2).join(':'));
+  const formatDate = (date) => {
+    return date.toISOString().split('T')[0];
+  };
+
+  const formatTime = (date) => {
+    return date.toTimeString().split(':').slice(0, 2).join(':');
   };
 
   return (
@@ -167,20 +151,46 @@ const BookingScreen = () => {
       </View>
 
       <Text style={styles.label}>Travel Date</Text>
-      <TextInput
+      <TouchableOpacity
         style={styles.input}
-        value={travelDate}
-        onChangeText={setTravelDate}
-        placeholder="YYYY-MM-DD"
-      />
+        onPress={() => setShowDatePicker(true)}
+      >
+        <Text>{formatDate(travelDate)}</Text>
+      </TouchableOpacity>
+      {showDatePicker && (
+        <DateTimePicker
+          value={travelDate}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(event, selectedDate) => {
+            setShowDatePicker(false);
+            if (selectedDate) {
+              setTravelDate(new Date(selectedDate));
+            }
+          }}
+        />
+      )}
 
       <Text style={styles.label}>Travel Time</Text>
-      <TextInput
+      <TouchableOpacity
         style={styles.input}
-        value={travelTime}
-        onChangeText={setTravelTime}
-        placeholder="HH:MM"
-      />
+        onPress={() => setShowTimePicker(true)}
+      >
+        <Text>{formatTime(travelDate)}</Text>
+      </TouchableOpacity>
+      {showTimePicker && (
+        <DateTimePicker
+          value={travelDate}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(event, selectedTime) => {
+            setShowTimePicker(false);
+            if (selectedTime) {
+              setTravelDate(new Date(selectedTime));
+            }
+          }}
+        />
+      )}
 
       <Text style={styles.label}>Route</Text>
       <View style={styles.pickerWrapper}>
@@ -284,7 +294,7 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: '#ccc',
-    padding: 10,
+    padding: 12,
     borderRadius: 8,
     marginTop: 5,
   },

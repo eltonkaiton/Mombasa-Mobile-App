@@ -21,6 +21,7 @@ const MyBookingsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // ✅ Fetch bookings from API
   const fetchBookings = useCallback(async () => {
     try {
       setLoading(true);
@@ -59,12 +60,14 @@ const MyBookingsScreen = () => {
     fetchBookings();
   }, [fetchBookings]);
 
+  // ✅ Refresh handler
   const onRefresh = () => {
     setRefreshing(true);
     fetchBookings();
   };
 
-  const generateReceipt = async (booking) => {
+  // ✅ Ticket generator
+  const generateTicket = async (booking) => {
     try {
       const html = `
         <html>
@@ -77,13 +80,17 @@ const MyBookingsScreen = () => {
           <body class="p-4">
             <div class="container">
               <h2 class="text-center mb-4">Mombasa Ferry Services</h2>
-              <h4 class="text-center mb-3">Booking Receipt</h4>
+              <h4 class="text-center mb-3">Booking Ticket</h4>
               
               <table class="table table-bordered">
                 <tbody>
                   <tr>
                     <th scope="row">Booking ID</th>
                     <td>${booking._id}</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Passenger Name</th>
+                    <td>${booking.user_id?.full_name || "N/A"}</td>
                   </tr>
                   <tr>
                     <th scope="row">Ferry</th>
@@ -95,11 +102,11 @@ const MyBookingsScreen = () => {
                   </tr>
                   <tr>
                     <th scope="row">Time</th>
-                    <td>${booking.travel_time}</td>
+                    <td>${booking.travel_time || "N/A"}</td>
                   </tr>
                   <tr>
                     <th scope="row">Route</th>
-                    <td>${booking.route}</td>
+                    <td>${booking.route || "N/A"}</td>
                   </tr>
                   <tr>
                     <th scope="row">Status</th>
@@ -116,7 +123,8 @@ const MyBookingsScreen = () => {
                 </tbody>
               </table>
 
-              <p class="text-center mt-4">Thank you for booking with Mombasa Ferry Services.</p>
+              <p class="text-center mt-4">Please present this ticket before boarding.</p>
+              <p class="text-center">Thank you for booking with Mombasa Ferry Services.</p>
             </div>
           </body>
         </html>
@@ -125,11 +133,12 @@ const MyBookingsScreen = () => {
       const { uri } = await Print.printToFileAsync({ html });
       await Sharing.shareAsync(uri);
     } catch (error) {
-      console.error("Receipt generation error:", error);
-      Alert.alert("Error", "Failed to generate receipt.");
+      console.error("Ticket generation error:", error);
+      Alert.alert("Error", "Failed to generate ticket.");
     }
   };
 
+  // ✅ Render each booking card
   const renderBooking = ({ item }) => (
     <View style={styles.bookingCard}>
       <Text style={styles.bookingText}>
@@ -138,22 +147,25 @@ const MyBookingsScreen = () => {
       <Text style={styles.bookingText}>
         Date: {new Date(item.travel_date).toLocaleDateString()}
       </Text>
-      <Text style={styles.bookingText}>Time: {item.travel_time}</Text>
-      <Text style={styles.bookingText}>Route: {item.route}</Text>
+      <Text style={styles.bookingText}>Time: {item.travel_time || "N/A"}</Text>
+      <Text style={styles.bookingText}>Route: {item.route || "N/A"}</Text>
       <Text style={styles.bookingText}>Status: {item.booking_status}</Text>
       <Text style={styles.bookingText}>Payment: {item.payment_status}</Text>
       <Text style={styles.bookingText}>Amount Paid: KES {item.amount_paid}</Text>
+      <Text style={styles.bookingText}>
+        Passenger: {item.user_id?.full_name || "N/A"}
+      </Text>
 
       {item.payment_status === "paid" && item.booking_status === "assigned" ? (
         <TouchableOpacity
-          style={styles.receiptButton}
-          onPress={() => generateReceipt(item)}
+          style={styles.ticketButton}
+          onPress={() => generateTicket(item)}
         >
-          <Text style={styles.receiptButtonText}>Download Receipt</Text>
+          <Text style={styles.ticketButtonText}>Download Ticket</Text>
         </TouchableOpacity>
       ) : (
         <View style={styles.disabledButton}>
-          <Text style={styles.disabledButtonText}>Receipt Unavailable</Text>
+          <Text style={styles.disabledButtonText}>Ticket Unavailable</Text>
         </View>
       )}
     </View>
@@ -213,13 +225,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 4,
   },
-  receiptButton: {
+  ticketButton: {
     marginTop: 10,
     padding: 10,
     backgroundColor: "#007BFF",
     borderRadius: 6,
   },
-  receiptButtonText: {
+  ticketButtonText: {
     color: "#fff",
     textAlign: "center",
   },
