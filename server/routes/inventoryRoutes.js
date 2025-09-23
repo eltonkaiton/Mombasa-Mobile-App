@@ -36,7 +36,7 @@ const authenticateInventoryToken = (req, res, next) => {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.category.toLowerCase() !== 'inventory') {
+    if (decoded.category && decoded.category.toLowerCase() !== 'inventory') {
       return res.status(403).json({ message: 'Access denied. Inventory staff only.' });
     }
     req.user = decoded;
@@ -256,7 +256,7 @@ router.get('/deliveries', authenticateInventoryToken, async (req, res) => {
 });
 
 // =============================
-// PATCH: Mark Delivery as Received
+// PATCH: Mark Delivery as Delivered (supplier-side)
 // =============================
 router.patch('/deliveries/:id/received', authenticateInventoryToken, async (req, res) => {
   const { id } = req.params;
@@ -269,14 +269,16 @@ router.patch('/deliveries/:id/received', authenticateInventoryToken, async (req,
     order.delivered_at = new Date();
     await order.save();
 
-    res.status(200).json({ message: 'Delivery marked as received', order });
+    res.status(200).json({ message: 'Delivery marked as delivered', order });
   } catch (err) {
     console.error('Mark delivery received error:', err);
-    res.status(500).json({ message: 'Failed to mark delivery as received' });
+    res.status(500).json({ message: 'Failed to mark delivery as delivered' });
   }
 });
 
-// PATCH: Inventory confirms delivery received (idempotent)
+// =============================
+// PATCH: Inventory confirms delivery received (idempotent) + auto stock update
+// =============================
 router.patch('/deliveries/:id/confirm-received', authenticateInventoryToken, async (req, res) => {
   const { id } = req.params;
 
@@ -289,17 +291,34 @@ router.patch('/deliveries/:id/confirm-received', authenticateInventoryToken, asy
       return res.status(400).json({ message: 'Cannot confirm receipt. Supplier has not delivered yet.' });
     }
 
-    // Already received
+    // Already received — idempotent
     if (order.delivery_status === 'received') {
       return res.status(200).json({ message: 'Delivery already confirmed as received', order });
     }
 
     // Only allow confirmation if supplier has delivered
     if (order.delivery_status === 'delivered') {
+      // mark order as received
       order.delivery_status = 'received';
       order.received_at = new Date();
+
+      // Try to update inventory item stock
+      try {
+        const item = await InventoryItem.findById(order.item_id);
+        if (item) {
+          // Ensure order.quantity is a number
+          const qty = Number(order.quantity) || 0;
+          item.current_stock = (Number(item.current_stock) || 0) + qty;
+          await item.save();
+        }
+      } catch (itemErr) {
+        // Log item update errors but continue to save order status
+        console.error('Failed to update inventory item stock:', itemErr);
+      }
+
       await order.save();
-      return res.status(200).json({ message: 'Delivery confirmed as received', order });
+
+      return res.status(200).json({ message: 'Delivery confirmed as received and inventory updated', order });
     }
 
     // Fallback for unexpected status
@@ -310,7 +329,5 @@ router.patch('/deliveries/:id/confirm-received', authenticateInventoryToken, asy
     res.status(500).json({ message: 'Failed to confirm delivery receipt' });
   }
 });
-
-
 
 export default router;

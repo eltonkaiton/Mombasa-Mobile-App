@@ -275,20 +275,14 @@ export default function InventoryScreen({ navigation }) {
   };
 
   // ===========================
-  // Render inventory item
+  // Render inventory item (ONLY NAME + STOCK)
   // ===========================
   const renderItem = ({ item }) => {
-    const isLowStock = item?.current_stock < item?.reorder_level;
     return (
-      <View key={item._id} style={[styles.card, isLowStock && styles.lowStockCard]}>
+      <View key={item._id} style={styles.card}>
         <View style={styles.cardHeader}>
           <Text style={styles.itemName}>{item.item_name}</Text>
           <View style={{ flexDirection: 'row', gap: 10 }}>
-            {isLowStock && (
-              <TouchableOpacity onPress={() => openOrderModal(item)}>
-                <Ionicons name="cart-outline" size={20} color="#d00000" />
-              </TouchableOpacity>
-            )}
             <TouchableOpacity onPress={() => openEditModal(item)}>
               <Ionicons name="create-outline" size={20} color="#0077b6" />
             </TouchableOpacity>
@@ -298,9 +292,6 @@ export default function InventoryScreen({ navigation }) {
           </View>
         </View>
         <Text style={styles.detail}>Stock: {item.current_stock}</Text>
-        <Text style={styles.detail}>Reorder Level: {item.reorder_level}</Text>
-        <Text style={styles.detail}>Unit: {item.unit}</Text>
-        {isLowStock && <Text style={styles.warningText}>⚠️ Low Stock — Reorder Needed!</Text>}
       </View>
     );
   };
@@ -365,7 +356,7 @@ export default function InventoryScreen({ navigation }) {
         ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 30 }}>No items.</Text>}
       />
 
-      {/* Modals */}
+      {/* Modals remain the same */}
       {/* Low-stock order */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -537,11 +528,9 @@ const styles = StyleSheet.create({
   navButtonText: { marginLeft: 6, fontSize: 15, color: '#0077b6', fontWeight: '500' },
   searchInput: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 10, marginBottom: 12, backgroundColor: '#fff' },
   card: { backgroundColor: '#ffffff', borderRadius: 10, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
-  lowStockCard: { backgroundColor: '#fff0f0', borderColor: '#ff4d4d', borderWidth: 1 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' },
   itemName: { fontSize: 18, fontWeight: 'bold', color: '#023e8a' },
   detail: { fontSize: 15, color: '#333', marginBottom: 2 },
-  warningText: { marginTop: 8, color: '#d00000', fontWeight: '600' },
   modalOverlay: { flex: 1, backgroundColor: '#000000aa', justifyContent: 'center', paddingHorizontal: 30 },
   modalCard: { backgroundColor: '#fff', borderRadius: 10, padding: 20 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10 },

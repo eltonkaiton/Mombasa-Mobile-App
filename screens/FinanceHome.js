@@ -16,15 +16,7 @@ import {
   fetchBookings,
   approveBookingPayment as approvePayment,
   rejectBookingPayment as rejectPayment,
-  approveBooking,
-  placeBookingOnFerry as placeOnFerry
 } from '../services/financeApi';
-
-const ferryOptions = [
-  { id: 1, name: 'Ferry A' },
-  { id: 2, name: 'Ferry B' },
-  { id: 3, name: 'Ferry C' },
-];
 
 const FinanceHome = () => {
   const [summary, setSummary] = useState(null);
@@ -32,9 +24,6 @@ const FinanceHome = () => {
   const [filteredBookings, setFilteredBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedBookingId, setSelectedBookingId] = useState(null);
-  const [selectedFerry, setSelectedFerry] = useState(ferryOptions[0].id);
 
   const navigation = useNavigation();
 
@@ -85,39 +74,6 @@ const FinanceHome = () => {
       loadData();
     } catch (err) {
       Alert.alert('Error', err.message || 'Failed to reject payment');
-    }
-  };
-
-  const handleApproveBooking = async (id) => {
-    try {
-      await approveBooking(id);
-      Alert.alert('Success', 'Booking approved');
-      loadData();
-    } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to approve booking');
-    }
-  };
-
-  const handlePlaceOnFerry = (bookingId) => {
-    setSelectedBookingId(bookingId);
-    setSelectedFerry(ferryOptions[0].id);
-    setModalVisible(true);
-  };
-
-  const confirmPlaceOnFerry = async () => {
-    try {
-      const ferryName = ferryOptions.find(f => f.id === selectedFerry)?.name;
-      if (!ferryName) {
-        Alert.alert('Error', 'Invalid ferry selection');
-        return;
-      }
-
-      await placeOnFerry(selectedBookingId, ferryName);
-      Alert.alert('Success', 'User placed on ferry successfully');
-      setModalVisible(false);
-      loadData();
-    } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to place on ferry');
     }
   };
 
@@ -248,11 +204,6 @@ const FinanceHome = () => {
   };
 
   const renderBooking = ({ item }) => {
-    const canPlaceOnFerry =
-      item.payment_status === 'paid' &&
-      item.booking_status === 'approved' &&
-      !item.boarding_status;
-
     return (
       <View style={styles.bookingCard}>
         <Text style={styles.bookingText}>User: {item.user_id?.full_name || 'N/A'}</Text>
@@ -292,19 +243,6 @@ const FinanceHome = () => {
                 <Text style={styles.btnText}>Reject Payment</Text>
               </TouchableOpacity>
             </>
-          )}
-          {item.booking_status === 'pending' && (
-            <TouchableOpacity onPress={() => handleApproveBooking(item._id)} style={styles.approveBookingBtn}>
-              <Text style={styles.btnText}>Approve Booking</Text>
-            </TouchableOpacity>
-          )}
-          {canPlaceOnFerry && (
-            <TouchableOpacity
-              onPress={() => handlePlaceOnFerry(item._id)}
-              style={[styles.approveBookingBtn, { backgroundColor: '#005f73', marginTop: 8 }]}
-            >
-              <Text style={styles.btnText}>Place on Ferry</Text>
-            </TouchableOpacity>
           )}
           <TouchableOpacity
             onPress={() => handleDownloadReceipt(item)}
@@ -382,33 +320,6 @@ const FinanceHome = () => {
           </>
         }
       />
-
-      <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
-        <View style={styles.modalBackground}>
-          <View style={styles.modalContainer}>
-            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 10 }}>Select Ferry</Text>
-
-            <Picker
-              selectedValue={selectedFerry}
-              onValueChange={(itemValue) => setSelectedFerry(itemValue)}
-              style={{ width: '100%' }}
-            >
-              {ferryOptions.map(ferry => (
-                <Picker.Item key={ferry.id} label={ferry.name} value={ferry.id} />
-              ))}
-            </Picker>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
-              <Pressable style={[styles.modalBtn, { backgroundColor: 'green' }]} onPress={confirmPlaceOnFerry}>
-                <Text style={styles.btnText}>Confirm</Text>
-              </Pressable>
-              <Pressable style={[styles.modalBtn, { backgroundColor: 'red' }]} onPress={() => setModalVisible(false)}>
-                <Text style={styles.btnText}>Cancel</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </>
   );
 };
@@ -425,9 +336,6 @@ const styles = StyleSheet.create({
   rejectBtn: { backgroundColor: 'red', padding: 8, borderRadius: 6 },
   approveBookingBtn: { backgroundColor: '#0077b6', padding: 8, borderRadius: 6, marginTop: 10 },
   btnText: { color: '#fff', textAlign: 'center', fontWeight: '600' },
-  modalBackground: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContainer: { backgroundColor: '#fff', borderRadius: 10, padding: 20, width: '80%' },
-  modalBtn: { padding: 10, borderRadius: 6, flex: 1, marginHorizontal: 5 },
   headerButtons: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10, flexWrap: 'wrap' },
   headerBtn: { backgroundColor: '#0077b6', padding: 10, borderRadius: 6, margin: 5 },
   navButtons: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10 },
