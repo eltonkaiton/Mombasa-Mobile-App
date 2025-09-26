@@ -1,10 +1,11 @@
+// server/models/Booking.js
 import mongoose from 'mongoose';
 
 const bookingSchema = new mongoose.Schema({
   user_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false   // ✅ now optional
   },
 
   booking_type: {
@@ -85,7 +86,7 @@ const bookingSchema = new mongoose.Schema({
     default: 'pending'
   },
 
-  ferry_name: { // ✅ Added ferry_name field
+  ferry_name: {
     type: String,
     trim: true,
     default: null

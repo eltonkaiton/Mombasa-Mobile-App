@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const staffSchema = new mongoose.Schema({
-  full_name: {
+  name: {   // ✅ keep "name" for consistency
     type: String,
     required: true,
   },
@@ -19,7 +19,7 @@ const staffSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['staff', 'finance', 'inventory', 'admin'],
+    enum: ['staff', 'finance', 'inventory', 'admin', 'operating'], // ✅ standardized
     required: true,
   },
   status: {

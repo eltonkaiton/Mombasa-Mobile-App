@@ -1,12 +1,11 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
-const ferrySchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true },
-    capacity: { type: Number, required: true },
-    status: { type: String, enum: ["available", "unavailable"], default: "available" },
-  },
-  { timestamps: true }
-);
+const ferrySchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  capacity: { type: Number, required: true },
+  status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+  created_at: { type: Date, default: Date.now },
+});
 
-export default mongoose.model("Ferry", ferrySchema);
+const Ferry = mongoose.model('Ferry', ferrySchema);
+export default Ferry;

@@ -12,10 +12,12 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 
+// ✅ Backend login URLs
 const USER_LOGIN_URL = 'http://192.168.100.8:3000/api/users/login';
 const SUPPLIER_LOGIN_URL = 'http://192.168.100.8:3000/api/suppliers/login';
 const INVENTORY_LOGIN_URL = 'http://192.168.100.8:3000/api/inventory/login';
 const FINANCE_LOGIN_URL = 'http://192.168.100.8:3000/api/finance/login';
+const STAFF_LOGIN_URL = 'http://192.168.100.8:3000/api/staff/login';
 
 const LoginScreen = () => {
   const navigation = useNavigation();
@@ -25,6 +27,7 @@ const LoginScreen = () => {
   const [loading, setLoading] = useState(false);
   const [loginType, setLoginType] = useState('user');
 
+  // ✅ Get login URL based on type
   const getLoginUrl = () => {
     switch (loginType) {
       case 'supplier':
@@ -33,18 +36,36 @@ const LoginScreen = () => {
         return INVENTORY_LOGIN_URL;
       case 'finance':
         return FINANCE_LOGIN_URL;
+      case 'staff':
+        return STAFF_LOGIN_URL;
       default:
         return USER_LOGIN_URL;
     }
   };
 
+  // ✅ Toggle between all login types
   const handleToggleLoginType = () => {
-    const types = ['user', 'supplier', 'inventory', 'finance'];
+    const types = ['user', 'supplier', 'inventory', 'finance', 'staff'];
     const currentIndex = types.indexOf(loginType);
     const nextIndex = (currentIndex + 1) % types.length;
     setLoginType(types[nextIndex]);
   };
 
+  // ✅ Normalize role/category across all types
+  const normalizeRole = (role, category, loginType) => {
+    let normalized = (role || category || loginType).toLowerCase();
+
+    // unify naming
+    if (normalized === 'operating') {
+      normalized = 'staff';
+    }
+    if (normalized === 'user') {
+      normalized = 'passenger';
+    }
+    return normalized;
+  };
+
+  // ✅ Handle login process
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
       Alert.alert('Validation Error', 'Please enter both email and password');
@@ -70,16 +91,21 @@ const LoginScreen = () => {
 
       if (response.ok && data.token && data.user) {
         const { full_name, name, role, category } = data.user;
+        const userRole = normalizeRole(role, category, loginType);
 
-        // 👇 Get the actual role to use in routing
-        const userRole = (role || category || loginType).toLowerCase();
+        // ✅ Save session with staff-specific token
+        if (userRole === 'staff') {
+          await AsyncStorage.setItem('staffToken', data.token);
+        } else {
+          await AsyncStorage.setItem('token', data.token);
+        }
 
-        await AsyncStorage.setItem('token', data.token);
         await AsyncStorage.setItem('role', userRole);
         await AsyncStorage.setItem('user', JSON.stringify(data.user));
 
         Alert.alert('Success', 'Logged in successfully');
 
+        // ✅ Navigate based on role
         let destination;
         switch (userRole) {
           case 'admin':
@@ -134,7 +160,8 @@ const LoginScreen = () => {
           {loginType === 'user' && 'Switch to Supplier Login'}
           {loginType === 'supplier' && 'Switch to Inventory Login'}
           {loginType === 'inventory' && 'Switch to Finance Login'}
-          {loginType === 'finance' && 'Switch to User Login'}
+          {loginType === 'finance' && 'Switch to Staff Login'}
+          {loginType === 'staff' && 'Switch to User Login'}
         </Text>
       </TouchableOpacity>
 

@@ -1,23 +1,38 @@
 import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
 
-const JWT_SECRET = 'super_secure_inventory_token_123'; // keep in .env in production
+dotenv.config();
 
-export const authenticateInventoryToken = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(403).json({ message: 'No token provided' });
-  }
+const JWT_SECRET = process.env.JWT_SECRET || 'super_secure_mombasa_token_123';
 
-  const token = authHeader.split(' ')[1];
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.category.toLowerCase() !== 'inventory') {
-      return res.status(403).json({ message: 'Access denied. Inventory staff only.' });
+// Generic role-based authentication middleware
+export const authenticateRole = (requiredRole) => {
+  return (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(403).json({ message: 'No token provided' });
     }
-    req.user = decoded;
-    next();
-  } catch (err) {
-    console.error('Token error:', err);
-    return res.status(403).json({ message: 'Invalid or expired token' });
-  }
+
+    const token = authHeader.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+
+      // Check role
+      if (!decoded.role || decoded.role.toLowerCase() !== requiredRole.toLowerCase()) {
+        return res.status(403).json({ message: `Access denied. ${requiredRole} only.` });
+      }
+
+      req.user = decoded;
+      next();
+    } catch (err) {
+      console.error('Token error:', err);
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+  };
 };
+
+// Predefined middleware
+export const authenticateInventoryToken = authenticateRole('inventory');
+export const authenticateFerryCrewToken = authenticateRole('ferrycrew');
+export const authenticateAdminToken = authenticateRole('admin');
+export const authenticateStaffToken = authenticateRole('staff'); // ✅ Added staff
